@@ -208,7 +208,7 @@ def show_progress():
 ###############################################################################
 # 3. 벡터 데이터베이스 설정
 ###############################################################################
-@st.cache_resource(show_spinner="문서를 임베딩하는 중...")
+@st.cache_resource(show_spinner="벡터 스토어를 로드하는 중...")
 def setup_vector_store():
     """FAISS 인덱스를 로드합니다."""
     try:
@@ -216,9 +216,36 @@ def setup_vector_store():
         vector_store = FAISS.load_local("faiss_index", embeddings)
         st.success("벡터 스토어가 성공적으로 로드되었습니다.")
         return vector_store
+    except FileNotFoundError:
+        st.warning("FAISS 인덱스가 존재하지 않습니다. 인덱스를 생성합니다.")
+        try:
+            documents_dir = "./documents/"
+            supported_extensions = ["pdf", "txt", "docx"]
+
+            all_docs = []
+            for filename in os.listdir(documents_dir):
+                if any(filename.lower().endswith(ext) for ext in supported_extensions):
+                    file_path = os.path.join(documents_dir, filename)
+                    loader = UnstructuredLoader(file_path)
+                    documents = loader.load()
+                    all_docs.extend(documents)
+
+            if not all_docs:
+                st.error("`documents/` 폴더에 문서가 없습니다.")
+                return None
+
+            embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+            vector_store = FAISS.from_documents(all_docs, embeddings)
+            vector_store.save_local("faiss_index")
+            st.success("FAISS 인덱스가 성공적으로 생성되었습니다.")
+            return vector_store
+        except Exception as e:
+            st.error(f"FAISS 인덱스 생성 중 오류가 발생했습니다: {str(e)}")
+            return None
     except Exception as e:
         st.error(f"벡터 스토어 로드 중 오류가 발생했습니다: {str(e)}")
         return None
+
 ###############################################################################
 # 4. OpenAI 호출 함수
 ###############################################################################
